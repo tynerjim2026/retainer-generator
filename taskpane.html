@@ -1,0 +1,134 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+  <title>Retainer Generator</title>
+
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 18px;
+      color: #202833;
+      font-size: 14px;
+    }
+
+    h2 {
+      color: #17365d;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      line-height: 1.5;
+      color: #596579;
+    }
+
+    label {
+      display: block;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      font-size: 14px;
+      border: 1px solid #b8c1cd;
+      border-radius: 5px;
+    }
+
+    textarea {
+      min-height: 75px;
+      resize: vertical;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #generateRetainer {
+      background-color: #175cd3;
+    }
+
+    #generateCard {
+      background-color: #217346;
+    }
+
+    #status {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f0f4fa;
+      border-radius: 5px;
+      display: none;
+      white-space: pre-wrap;
+    }
+
+    .note {
+      font-size: 12px;
+      color: #667085;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Retainer & Payment Forms</h2>
+
+  <p>
+    Enter the information below once, then choose
+    which document you want to generate.
+  </p>
+
+  <label for="clientName">Client's Full Name</label>
+  <input
+    type="text"
+    id="clientName"
+    placeholder="Enter client's full name">
+
+  <label for="legalMatter">Legal Matter</label>
+  <textarea
+    id="legalMatter"
+    placeholder="Describe the legal matter"></textarea>
+
+  <label for="retainerAmount">Retainer Amount ($)</label>
+  <input
+    type="text"
+    id="retainerAmount"
+    inputmode="decimal"
+    placeholder="Enter amount">
+
+  <p class="note">
+    The amount entered will be used in both documents.
+    No amount is pre-filled.
+  </p>
+
+  <button id="generateRetainer" type="button">
+    Generate Retainer Agreement
+  </button>
+
+  <button id="generateCard" type="button">
+    Generate Credit Card Authorization
+  </button>
+
+  <div id="status" role="status"></div>
+
+  <script src="taskpane.js?v=1"></script>
+
+</body>
+</html>
