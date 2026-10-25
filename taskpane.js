@@ -1,36 +1,47 @@
 
 /*
- Retainer & Credit Card Authorization Generator
- Microsoft Word for Mac
+  Retainer & Credit Card Authorization Generator
+  Microsoft Word for Mac
+  Version 2
 */
 
 const $ = id => document.getElementById(id);
 
-const TEMPLATE_BASE =
-  "https://tynerjim2026.github.io/retainer-generator/";
-
-const RETAINER_TEMPLATE =
-  TEMPLATE_BASE + "Retainer.docx";
-
-const CARD_TEMPLATE =
-  TEMPLATE_BASE + "Card.docx";
-
 function showStatus(message) {
-  const status = $("status");
-  status.style.display = "block";
-  status.textContent = message;
+  const el = $("status");
+  el.style.display = "block";
+  el.textContent = message;
 }
 
-function formatMoney(amount) {
-  return Number(amount).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+function amountDetails() {
+  const raw = $("retainerAmount").value.trim();
+
+  if (!/^(?:\$)?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(raw)) {
+    throw new Error("Enter an amount such as 1500 or 2,500.00.");
+  }
+
+  const normalized = raw.replace(/[$,]/g, "");
+  const [whole, decimal = ""] = normalized.split(".");
+  const dollars = Number(whole);
+  const cents = Number(decimal.padEnd(2, "0"));
+
+  if (!Number.isSafeInteger(dollars) ||
+      dollars <= 0 ||
+      dollars >= 1000000000000) {
+    throw new Error("Enter a positive amount below one trillion dollars.");
+  }
+
+  return {
+    dollars,
+    cents,
+    formatted: "$" + dollars.toLocaleString("en-US") +
+      "." + String(cents).padStart(2, "0")
+  };
 }
 
-function numberToWords(n) {
-  const ones = [
-    "", "one", "two", "three", "four", "five",
+function numberWords(number) {
+  const small = [
+    "zero", "one", "two", "three", "four", "five",
     "six", "seven", "eight", "nine", "ten",
     "eleven", "twelve", "thirteen", "fourteen",
     "fifteen", "sixteen", "seventeen",
@@ -42,120 +53,154 @@ function numberToWords(n) {
     "fifty", "sixty", "seventy", "eighty", "ninety"
   ];
 
-  function underThousand(value) {
-    let words = [];
+  function belowThousand(n) {
+    if (n < 20) return small[n];
 
-    if (value >= 100) {
-      words.push(ones[Math.floor(value / 100)] + " hundred");
-      value %= 100;
+    if (n < 100) {
+      return tens[Math.floor(n / 10)] +
+        (n % 10 ? "-" + small[n % 10] : "");
     }
 
-    if (value >= 20) {
-      let part = tens[Math.floor(value / 10)];
-      if (value % 10) {
-        part += "-" + ones[value % 10];
-      }
-      words.push(part);
-    } else if (value > 0) {
-      words.push(ones[value]);
-    }
-
-    return words.join(" ");
+    return small[Math.floor(n / 100)] + " hundred" +
+      (n % 100 ? " " + belowThousand(n % 100) : "");
   }
 
-  if (n === 0) return "zero";
+  if (number === 0) return "zero";
 
-  const groups = [
+  const scales = [
     [1000000000, "billion"],
     [1000000, "million"],
     [1000, "thousand"],
     [1, ""]
   ];
 
-  let words = [];
+  const parts = [];
 
-  for (const [size, label] of groups) {
-    const group = Math.floor(n / size);
+  for (const [size, label] of scales) {
+    const group = Math.floor(number / size);
 
-    if (group > 0) {
-      let part = underThousand(group);
-      if (label) part += " " + label;
-      words.push(part);
-      n %= size;
+    if (group) {
+      parts.push(
+        belowThousand(group) + (label ? " " + label : "")
+      );
+      number %= size;
     }
   }
 
-  return words.join(" ");
+  return parts.join(" ");
 }
 
-function getAmount() {
-  const raw = $("retainerAmount").value.trim();
-
-  if (!/^\$?\s*(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(raw)) {
-    throw new Error(
-      "Enter a valid dollar amount, such as 1500 or 1500.00."
-    );
-  }
-
-  const amount = Number(raw.replace(/[$,\s]/g, ""));
-
-  if (!Number.isFinite(amount) ||
-      amount <= 0 ||
-      amount >= 1000000000000) {
-    throw new Error("Enter a valid positive retainer amount.");
-  }
-
-  return amount;
-}
-
-function getData(forRetainer) {
-  const amount = getAmount();
+function getData(type) {
+  const amount = amountDetails();
 
   const client = $("clientName").value.trim();
   const matter = $("legalMatter").value.trim();
 
-  if (forRetainer && !client) {
+  if (type === "retainer" && !client) {
     throw new Error("Enter the client's full name.");
   }
 
-  if (forRetainer && !matter) {
+  if (type === "retainer" && !matter) {
     throw new Error("Enter the legal matter.");
   }
 
-  const cents = Math.round(amount * 100);
-  const dollars = Math.floor(cents / 100);
-  const fraction = cents % 100;
+  if (client.length > 200 || matter.length > 1000) {
+    throw new Error("Please shorten the name or matter description.");
+  }
+
+  if (/[\r\n]/.test(client)) {
+    throw new Error("The client's name must be on one line.");
+  }
 
   return {
     client,
     matter,
-    amount: formatMoney(amount),
-    amountWords:
-      numberToWords(dollars) +
-      " dollars and " +
-      String(fraction).padStart(2, "0") +
-      "/100"
+    amount: amount.formatted,
+    words: numberWords(amount.dollars)
   };
 }
 
-/*
- Search and replace a placeholder in the
- currently open Word document.
-*/
-async function replacePlaceholder(context, marker, value) {
-  const matches = context.document.body.search(marker, {
+function requiredFields(type, data) {
+  if (type === "retainer") {
+    return [
+      ["{{CLIENT_NAME}}", data.client],
+      ["{{LEGAL_MATTER}}", data.matter],
+      ["{{RETAINER_WORDS}}", data.words],
+      ["{{RETAINER_AMOUNT}}", data.amount]
+    ];
+  }
+
+  return [
+    ["{{RETAINER_AMOUNT}}", data.amount]
+  ];
+}
+
+async function inspectDocument(type) {
+  return Word.run(async context => {
+    const required = type === "retainer"
+      ? [
+          "{{CLIENT_NAME}}",
+          "{{LEGAL_MATTER}}",
+          "{{RETAINER_WORDS}}",
+          "{{RETAINER_AMOUNT}}"
+        ]
+      : ["{{RETAINER_AMOUNT}}"];
+
+    const results = required.map(marker => {
+      const matches = context.document.body.search(marker, {
+        matchCase: true,
+        matchWholeWord: false
+      });
+
+      matches.load("items");
+      return matches;
+    });
+
+    const otherMarker = type === "card"
+      ? context.document.body.search("{{CLIENT_NAME}}", {
+          matchCase: true,
+          matchWholeWord: false
+        })
+      : null;
+
+    if (otherMarker) otherMarker.load("items");
+
+    await context.sync();
+
+    const missing = required.filter(
+      (_, index) => results[index].items.length === 0
+    );
+
+    if (missing.length) {
+      throw new Error(
+        "The open Word document is not the correct fresh template. " +
+        "Missing: " + missing.join(", ")
+      );
+    }
+
+    if (otherMarker && otherMarker.items.length) {
+      throw new Error(
+        "This looks like the Retainer Agreement. " +
+        "Open the Credit Card Authorization template instead."
+      );
+    }
+  });
+}
+
+async function replaceAll(context, marker, value) {
+  const results = context.document.body.search(marker, {
     matchCase: true,
     matchWholeWord: false
   });
 
-  matches.load("items");
+  results.load("items");
   await context.sync();
 
-  if (matches.items.length === 0) {
-    throw new Error("Missing template placeholder: " + marker);
+  if (!results.items.length) {
+    throw new Error("Missing field: " + marker);
   }
 
-  for (const match of matches.items) {
+  for (const match of results.items) {
     match.insertText(
       String(value),
       Word.InsertLocation.replace
@@ -165,113 +210,31 @@ async function replacePlaceholder(context, marker, value) {
   await context.sync();
 }
 
-/*
- Insert a fresh template as a new document.
-*/
-async function openTemplate(url) {
-  if (!Office.context.requirements.isSetSupported(
-    "WordApi",
-    "1.3"
-  )) {
-    throw new Error(
-      "This Word version does not support the required document API."
-    );
-  }
-
-  const response = await fetch(url, {
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      "Could not load Word template. HTTP " + response.status
-    );
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-
-  let binary = "";
-  const chunkSize = 8192;
-
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(
-      null,
-      bytes.subarray(i, i + chunkSize)
-    );
-  }
-
-  const base64 = btoa(binary);
-
-  await Word.run(async context => {
-    context.application.createDocument(base64).open();
-    await context.sync();
-  });
-}
-
-/*
- Fill the current document.
- The template must contain the expected markers.
-*/
-async function fillRetainer(data) {
-  await Word.run(async context => {
-    const fields = [
-      ["{{CLIENT_NAME}}", data.client],
-      ["{{LEGAL_MATTER}}", data.matter],
-      ["{{RETAINER_AMOUNT}}", data.amount],
-      ["{{RETAINER_AMOUNT_WORDS}}", data.amountWords]
-    ];
-
-    for (const [marker, value] of fields) {
-      await replacePlaceholder(context, marker, value);
-    }
-  });
-}
-
-async function fillCard(data) {
-  await Word.run(async context => {
-    await replacePlaceholder(
-      context,
-      "{{CHARGE_AMOUNT}}",
-      data.amount
-    );
-  });
-}
-
-/*
- Generate the chosen document.
-*/
 async function generate(type) {
-  const button = $(
-    type === "retainer" ? "generateRetainer" : "generateCard"
-  );
+  const retainerButton = $("generateRetainer");
+  const cardButton = $("generateCard");
 
-  button.disabled = true;
+  retainerButton.disabled = true;
+  cardButton.disabled = true;
 
   try {
-    const data = getData(type === "retainer");
+    const data = getData(type);
 
-    const url = type === "retainer"
-      ? RETAINER_TEMPLATE
-      : CARD_TEMPLATE;
+    showStatus("Checking the open Word document...");
 
-    showStatus("Opening " +
-      (type === "retainer"
-        ? "Retainer Agreement"
-        : "Credit Card Authorization") +
-      " template...");
+    await inspectDocument(type);
 
-    await openTemplate(url);
+    await Word.run(async context => {
+      const fields = requiredFields(type, data);
 
-    /*
-      Word for Mac may switch to the new document
-      asynchronously. Confirm the active document
-      before filling it.
-    */
+      for (const [marker, value] of fields) {
+        await replaceAll(context, marker, value);
+      }
+    });
+
     showStatus(
-      "The template has been opened in Word. " +
-      "Select the newly opened document, then " +
-      "click the same Generate button again " +
-      "to fill its fields."
+      "Document completed successfully. " +
+      "Review it, then save it under a new filename."
     );
 
   } catch (error) {
@@ -279,17 +242,14 @@ async function generate(type) {
       "Unable to generate document: " +
       (error.message || String(error))
     );
-
     console.error(error);
 
   } finally {
-    button.disabled = false;
+    retainerButton.disabled = false;
+    cardButton.disabled = false;
   }
 }
 
-/*
- Start the questionnaire.
-*/
 Office.onReady(() => {
   $("generateRetainer").addEventListener("click", () => {
     generate("retainer");
@@ -300,6 +260,7 @@ Office.onReady(() => {
   });
 
   showStatus(
-    "Enter the information, then select the document to generate."
+    "Open a fresh copy of the appropriate Word template, " +
+    "enter the information, and click its Generate button."
   );
 });
