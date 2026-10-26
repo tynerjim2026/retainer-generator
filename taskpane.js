@@ -1,16 +1,18 @@
 
 /*
-  Retainer & Credit Card Authorization Generator
+  Retainer Agreement Generator
   Microsoft Word for Mac
-  Version 3 - Optional Credit Card Authorization
+  Version 4 - Single Generate Button
 */
 
 const $ = id => document.getElementById(id);
 
 function showStatus(message) {
   const el = $("status");
-  el.style.display = "block";
-  el.textContent = message;
+  if (el) {
+    el.style.display = "block";
+    el.textContent = message;
+  }
 }
 
 function amountDetails() {
@@ -30,7 +32,9 @@ function amountDetails() {
     dollars <= 0 ||
     dollars >= 1000000000000
   ) {
-    throw new Error("Enter a positive amount below one trillion dollars.");
+    throw new Error(
+      "Enter a positive amount below one trillion dollars."
+    );
   }
 
   return {
@@ -100,17 +104,17 @@ function numberWords(number) {
   return parts.join(" ");
 }
 
-function getData(type) {
+function getData() {
   const amount = amountDetails();
 
   const client = $("clientName").value.trim();
   const matter = $("legalMatter").value.trim();
 
-  if (type === "retainer" && !client) {
+  if (!client) {
     throw new Error("Enter the client's full name.");
   }
 
-  if (type === "retainer" && !matter) {
+  if (!matter) {
     throw new Error("Enter the legal matter.");
   }
 
@@ -148,17 +152,11 @@ function includeCardForm() {
   return selected.value === "yes";
 }
 
-function requiredFields(type, data) {
-  if (type === "retainer") {
-    return [
-      ["{{CLIENT_NAME}}", data.client],
-      ["{{LEGAL_MATTER}}", data.matter],
-      ["{{RETAINER_WORDS}}", data.words],
-      ["{{RETAINER_AMOUNT}}", data.amount]
-    ];
-  }
-
+function requiredFields(data) {
   return [
+    ["{{CLIENT_NAME}}", data.client],
+    ["{{LEGAL_MATTER}}", data.matter],
+    ["{{RETAINER_WORDS}}", data.words],
     ["{{RETAINER_AMOUNT}}", data.amount]
   ];
 }
@@ -175,19 +173,17 @@ async function searchMatches(context, marker) {
   return results.items;
 }
 
-async function inspectDocument(type) {
+async function inspectDocument() {
   return Word.run(async context => {
-    const required = type === "retainer"
-      ? [
-          "{{CLIENT_NAME}}",
-          "{{LEGAL_MATTER}}",
-          "{{RETAINER_WORDS}}",
-          "{{RETAINER_AMOUNT}}",
-          "[[CARD_SECTION]]",
-          "[[CARD_START]]",
-          "[[CARD_END]]"
-        ]
-      : ["{{RETAINER_AMOUNT}}"];
+    const required = [
+      "{{CLIENT_NAME}}",
+      "{{LEGAL_MATTER}}",
+      "{{RETAINER_WORDS}}",
+      "{{RETAINER_AMOUNT}}",
+      "[[CARD_SECTION]]",
+      "[[CARD_START]]",
+      "[[CARD_END]]"
+    ];
 
     const results = required.map(marker => {
       const matches = context.document.body.search(marker, {
@@ -199,18 +195,6 @@ async function inspectDocument(type) {
       return matches;
     });
 
-    const otherMarker = type === "card"
-      ? context.document.body.search(
-          "{{CLIENT_NAME}}",
-          {
-            matchCase: true,
-            matchWholeWord: false
-          }
-        )
-      : null;
-
-    if (otherMarker) otherMarker.load("items");
-
     await context.sync();
 
     const missing = required.filter(
@@ -219,15 +203,8 @@ async function inspectDocument(type) {
 
     if (missing.length) {
       throw new Error(
-        "The open Word document is not the correct fresh template. " +
+        "Open a fresh copy of R4Search.docx. " +
         "Missing: " + missing.join(", ")
-      );
-    }
-
-    if (otherMarker && otherMarker.items.length) {
-      throw new Error(
-        "This looks like the Retainer Agreement. " +
-        "Open the Credit Card Authorization template instead."
       );
     }
   });
@@ -274,13 +251,8 @@ async function removeCardSection(context) {
     );
   }
 
-  /*
-    The marker is at the end of the final signature
-    paragraph on page 3, immediately before the
-    section break that introduces page 4.
-
-    Delete from that marker to the end of the document.
-  */
+  // Remove everything from the page-3 marker
+  // through the end of the document.
 
   const start = matches[0];
   const end = context.document.body.getRange("End");
@@ -291,38 +263,41 @@ async function removeCardSection(context) {
   await context.sync();
 }
 
-async function generate(type) {
- const retainerButton = $("generateRetainer");
+async function generate() {
+  const retainerButton = $("generateRetainer");
 
-retainerButton.disabled = true;
+  if (!retainerButton) {
+    showStatus("Generate button not found in the questionnaire.");
+    return;
+  }
+
+  retainerButton.disabled = true;
+
   try {
-    const data = getData(type);
-
-    const includeCard =
-      type === "retainer" ? includeCardForm() : false;
+    const data = getData();
+    const includeCard = includeCardForm();
 
     showStatus("Checking the open Word document...");
 
-    await inspectDocument(type);
+    await inspectDocument();
 
     await Word.run(async context => {
-      const fields = requiredFields(type, data);
+      const fields = requiredFields(data);
 
       for (const [marker, value] of fields) {
         await replaceAll(context, marker, value);
       }
 
-      if (type === "retainer") {
-        if (includeCard) {
-          await removeMarkers(context);
-        } else {
-          await removeCardSection(context);
-        }
+      if (includeCard) {
+        await removeMarkers(context);
+      } else {
+        await removeCardSection(context);
       }
     });
 
     showStatus(
-      "Document completed. Review the page count and formatting, " +
+      "Document completed successfully. " +
+      "Review the page count and formatting, " +
       "then save it under a new filename."
     );
 
@@ -335,21 +310,26 @@ retainerButton.disabled = true;
 
   } finally {
     retainerButton.disabled = false;
-
   }
 }
 
 Office.onReady(() => {
-  $("generateRetainer").addEventListener(
-    "click",
-    () => generate("retainer")
-  );
+  const retainerButton = $("generateRetainer");
 
- 
+  if (retainerButton) {
+    retainerButton.addEventListener(
+      "click",
+      () => generate()
+    );
 
-  showStatus(
-    "Open a fresh copy of the appropriate Word template, " +
-    "enter the information, select whether to include the " +
-    "Credit Card Authorization Form, and click Generate."
-  );
+    showStatus(
+      "Open a fresh copy of R4Search.docx, " +
+      "enter the information, select whether to include " +
+      "the Credit Card Authorization Form, and click Generate."
+    );
+  } else {
+    showStatus(
+      "Unable to find the Generate Retainer Agreement button."
+    );
+  }
 });
