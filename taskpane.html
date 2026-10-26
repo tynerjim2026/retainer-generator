@@ -114,9 +114,32 @@
     placeholder="Enter amount">
 
   <p class="note">
-    The amount entered will be used in both documents.
-    No amount is pre-filled.
-  </p>
+  The amount entered will be used in both documents.
+  No amount is pre-filled.
+</p>
+
+<label>Is a Credit Card Authorization Form needed?</label>
+
+<div style="margin: 15px 0 25px 0;">
+
+  <label style="display:block; margin-bottom:12px;">
+    <input type="radio"
+           name="includeCard"
+           value="yes"
+           style="width:auto; margin-right:8px;">
+    Yes - Include Credit Card Authorization form
+  </label>
+
+  <label style="display:block;">
+    <input type="radio"
+           name="includeCard"
+           value="no"
+           checked
+           style="width:auto; margin-right:8px;">
+    No - Retainer Agreement only
+  </label>
+
+</div>
 
   <button id="generateRetainer" type="button">
     Generate Retainer Agreement
