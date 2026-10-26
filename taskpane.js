@@ -292,12 +292,9 @@ async function removeCardSection(context) {
 }
 
 async function generate(type) {
-  const retainerButton = $("generateRetainer");
-  const cardButton = $("generateCard");
+ const retainerButton = $("generateRetainer");
 
-  retainerButton.disabled = true;
-  cardButton.disabled = true;
-
+retainerButton.disabled = true;
   try {
     const data = getData(type);
 
@@ -338,7 +335,7 @@ async function generate(type) {
 
   } finally {
     retainerButton.disabled = false;
-    cardButton.disabled = false;
+
   }
 }
 
@@ -348,10 +345,7 @@ Office.onReady(() => {
     () => generate("retainer")
   );
 
-  $("generateCard").addEventListener(
-    "click",
-    () => generate("card")
-  );
+ 
 
   showStatus(
     "Open a fresh copy of the appropriate Word template, " +
