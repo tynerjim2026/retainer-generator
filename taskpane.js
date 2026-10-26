@@ -2,13 +2,14 @@
 /*
   Retainer Agreement Generator
   Microsoft Word for Mac
-  Version 4 - Single Generate Button
+  Version 5 - Single Button and Initialization Fix
 */
 
 const $ = id => document.getElementById(id);
 
 function showStatus(message) {
   const el = $("status");
+
   if (el) {
     el.style.display = "block";
     el.textContent = message;
@@ -19,11 +20,14 @@ function amountDetails() {
   const raw = $("retainerAmount").value.trim();
 
   if (!/^(?:\$)?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(raw)) {
-    throw new Error("Enter an amount such as 1500 or 2,500.00.");
+    throw new Error(
+      "Enter an amount such as 1500 or 2,500.00."
+    );
   }
 
   const normalized = raw.replace(/[$,]/g, "");
   const [whole, decimal = ""] = normalized.split(".");
+
   const dollars = Number(whole);
   const cents = Number(decimal.padEnd(2, "0"));
 
@@ -50,20 +54,23 @@ function amountDetails() {
 
 function numberWords(number) {
   const small = [
-    "zero", "one", "two", "three", "four", "five",
-    "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen",
-    "fifteen", "sixteen", "seventeen",
-    "eighteen", "nineteen"
+    "zero", "one", "two", "three", "four",
+    "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen",
+    "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen"
   ];
 
   const tens = [
     "", "", "twenty", "thirty", "forty",
-    "fifty", "sixty", "seventy", "eighty", "ninety"
+    "fifty", "sixty", "seventy", "eighty",
+    "ninety"
   ];
 
   function belowThousand(n) {
-    if (n < 20) return small[n];
+    if (n < 20) {
+      return small[n];
+    }
 
     if (n < 100) {
       return (
@@ -79,7 +86,9 @@ function numberWords(number) {
     );
   }
 
-  if (number === 0) return "zero";
+  if (number === 0) {
+    return "zero";
+  }
 
   const scales = [
     [1000000000, "billion"],
@@ -95,8 +104,10 @@ function numberWords(number) {
 
     if (group) {
       parts.push(
-        belowThousand(group) + (label ? " " + label : "")
+        belowThousand(group) +
+        (label ? " " + label : "")
       );
+
       number %= size;
     }
   }
@@ -111,14 +122,21 @@ function getData() {
   const matter = $("legalMatter").value.trim();
 
   if (!client) {
-    throw new Error("Enter the client's full name.");
+    throw new Error(
+      "Enter the client's full name."
+    );
   }
 
   if (!matter) {
-    throw new Error("Enter the legal matter.");
+    throw new Error(
+      "Enter the legal matter."
+    );
   }
 
-  if (client.length > 200 || matter.length > 1000) {
+  if (
+    client.length > 200 ||
+    matter.length > 1000
+  ) {
     throw new Error(
       "Please shorten the name or matter description."
     );
@@ -162,12 +180,16 @@ function requiredFields(data) {
 }
 
 async function searchMatches(context, marker) {
-  const results = context.document.body.search(marker, {
-    matchCase: true,
-    matchWholeWord: false
-  });
+  const results = context.document.body.search(
+    marker,
+    {
+      matchCase: true,
+      matchWholeWord: false
+    }
+  );
 
   results.load("items");
+
   await context.sync();
 
   return results.items;
@@ -186,35 +208,46 @@ async function inspectDocument() {
     ];
 
     const results = required.map(marker => {
-      const matches = context.document.body.search(marker, {
-        matchCase: true,
-        matchWholeWord: false
-      });
+      const matches = context.document.body.search(
+        marker,
+        {
+          matchCase: true,
+          matchWholeWord: false
+        }
+      );
 
       matches.load("items");
+
       return matches;
     });
 
     await context.sync();
 
     const missing = required.filter(
-      (_, index) => results[index].items.length === 0
+      (_, index) =>
+        results[index].items.length === 0
     );
 
     if (missing.length) {
       throw new Error(
         "Open a fresh copy of R4Search.docx. " +
-        "Missing: " + missing.join(", ")
+        "Missing: " +
+        missing.join(", ")
       );
     }
   });
 }
 
 async function replaceAll(context, marker, value) {
-  const matches = await searchMatches(context, marker);
+  const matches = await searchMatches(
+    context,
+    marker
+  );
 
   if (!matches.length) {
-    throw new Error("Missing field: " + marker);
+    throw new Error(
+      "Missing field: " + marker
+    );
   }
 
   for (const match of matches) {
@@ -235,7 +268,11 @@ async function removeMarkers(context) {
   ];
 
   for (const marker of markers) {
-    await replaceAll(context, marker, "");
+    await replaceAll(
+      context,
+      marker,
+      ""
+    );
   }
 }
 
@@ -251,13 +288,14 @@ async function removeCardSection(context) {
     );
   }
 
-  // Remove everything from the page-3 marker
-  // through the end of the document.
-
   const start = matches[0];
-  const end = context.document.body.getRange("End");
 
-  const sectionToRemove = start.expandTo(end);
+  const end =
+    context.document.body.getRange("End");
+
+  const sectionToRemove =
+    start.expandTo(end);
+
   sectionToRemove.delete();
 
   await context.sync();
@@ -267,7 +305,9 @@ async function generate() {
   const retainerButton = $("generateRetainer");
 
   if (!retainerButton) {
-    showStatus("Generate button not found in the questionnaire.");
+    showStatus(
+      "Generate button not found."
+    );
     return;
   }
 
@@ -275,9 +315,12 @@ async function generate() {
 
   try {
     const data = getData();
+
     const includeCard = includeCardForm();
 
-    showStatus("Checking the open Word document...");
+    showStatus(
+      "Checking the open Word document..."
+    );
 
     await inspectDocument();
 
@@ -285,7 +328,11 @@ async function generate() {
       const fields = requiredFields(data);
 
       for (const [marker, value] of fields) {
-        await replaceAll(context, marker, value);
+        await replaceAll(
+          context,
+          marker,
+          value
+        );
       }
 
       if (includeCard) {
@@ -306,6 +353,7 @@ async function generate() {
       "Unable to generate document: " +
       (error.message || String(error))
     );
+
     console.error(error);
 
   } finally {
@@ -313,23 +361,37 @@ async function generate() {
   }
 }
 
-Office.onReady(() => {
+/*
+  Initialize as soon as the HTML page is ready.
+  Do not rely solely on Office.onReady.
+*/
+
+function initializeGenerator() {
   const retainerButton = $("generateRetainer");
 
-  if (retainerButton) {
-    retainerButton.addEventListener(
-      "click",
-      () => generate()
+  if (!retainerButton) {
+    console.error(
+      "Generate Retainer Agreement button not found."
     );
-
-    showStatus(
-      "Open a fresh copy of R4Search.docx, " +
-      "enter the information, select whether to include " +
-      "the Credit Card Authorization Form, and click Generate."
-    );
-  } else {
-    showStatus(
-      "Unable to find the Generate Retainer Agreement button."
-    );
+    return;
   }
-});
+
+  retainerButton.onclick = function () {
+    generate();
+  };
+
+  showStatus(
+    "Generator is ready. " +
+    "Open a fresh copy of R4Search.docx, " +
+    "enter the information, and click Generate."
+  );
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    initializeGenerator
+  );
+} else {
+  initializeGenerator();
+}
