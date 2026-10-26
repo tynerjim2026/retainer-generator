@@ -2,7 +2,7 @@
 /*
   Retainer & Credit Card Authorization Generator
   Microsoft Word for Mac
-  Version 2
+  Version 3 - Optional Credit Card Authorization
 */
 
 const $ = id => document.getElementById(id);
@@ -25,17 +25,22 @@ function amountDetails() {
   const dollars = Number(whole);
   const cents = Number(decimal.padEnd(2, "0"));
 
-  if (!Number.isSafeInteger(dollars) ||
-      dollars <= 0 ||
-      dollars >= 1000000000000) {
+  if (
+    !Number.isSafeInteger(dollars) ||
+    dollars <= 0 ||
+    dollars >= 1000000000000
+  ) {
     throw new Error("Enter a positive amount below one trillion dollars.");
   }
 
   return {
     dollars,
     cents,
-    formatted: "$" + dollars.toLocaleString("en-US") +
-      "." + String(cents).padStart(2, "0")
+    formatted:
+      "$" +
+      dollars.toLocaleString("en-US") +
+      "." +
+      String(cents).padStart(2, "0")
   };
 }
 
@@ -57,12 +62,17 @@ function numberWords(number) {
     if (n < 20) return small[n];
 
     if (n < 100) {
-      return tens[Math.floor(n / 10)] +
-        (n % 10 ? "-" + small[n % 10] : "");
+      return (
+        tens[Math.floor(n / 10)] +
+        (n % 10 ? "-" + small[n % 10] : "")
+      );
     }
 
-    return small[Math.floor(n / 100)] + " hundred" +
-      (n % 100 ? " " + belowThousand(n % 100) : "");
+    return (
+      small[Math.floor(n / 100)] +
+      " hundred" +
+      (n % 100 ? " " + belowThousand(n % 100) : "")
+    );
   }
 
   if (number === 0) return "zero";
@@ -105,11 +115,15 @@ function getData(type) {
   }
 
   if (client.length > 200 || matter.length > 1000) {
-    throw new Error("Please shorten the name or matter description.");
+    throw new Error(
+      "Please shorten the name or matter description."
+    );
   }
 
   if (/[\r\n]/.test(client)) {
-    throw new Error("The client's name must be on one line.");
+    throw new Error(
+      "The client's name must be on one line."
+    );
   }
 
   return {
@@ -118,6 +132,20 @@ function getData(type) {
     amount: amount.formatted,
     words: numberWords(amount.dollars)
   };
+}
+
+function includeCardForm() {
+  const selected = document.querySelector(
+    'input[name="includeCard"]:checked'
+  );
+
+  if (!selected) {
+    throw new Error(
+      "Select Yes or No for the Credit Card Authorization Form."
+    );
+  }
+
+  return selected.value === "yes";
 }
 
 function requiredFields(type, data) {
@@ -135,6 +163,18 @@ function requiredFields(type, data) {
   ];
 }
 
+async function searchMatches(context, marker) {
+  const results = context.document.body.search(marker, {
+    matchCase: true,
+    matchWholeWord: false
+  });
+
+  results.load("items");
+  await context.sync();
+
+  return results.items;
+}
+
 async function inspectDocument(type) {
   return Word.run(async context => {
     const required = type === "retainer"
@@ -142,7 +182,10 @@ async function inspectDocument(type) {
           "{{CLIENT_NAME}}",
           "{{LEGAL_MATTER}}",
           "{{RETAINER_WORDS}}",
-          "{{RETAINER_AMOUNT}}"
+          "{{RETAINER_AMOUNT}}",
+          "[[CARD_SECTION]]",
+          "[[CARD_START]]",
+          "[[CARD_END]]"
         ]
       : ["{{RETAINER_AMOUNT}}"];
 
@@ -157,10 +200,13 @@ async function inspectDocument(type) {
     });
 
     const otherMarker = type === "card"
-      ? context.document.body.search("{{CLIENT_NAME}}", {
-          matchCase: true,
-          matchWholeWord: false
-        })
+      ? context.document.body.search(
+          "{{CLIENT_NAME}}",
+          {
+            matchCase: true,
+            matchWholeWord: false
+          }
+        )
       : null;
 
     if (otherMarker) otherMarker.load("items");
@@ -188,24 +234,59 @@ async function inspectDocument(type) {
 }
 
 async function replaceAll(context, marker, value) {
-  const results = context.document.body.search(marker, {
-    matchCase: true,
-    matchWholeWord: false
-  });
+  const matches = await searchMatches(context, marker);
 
-  results.load("items");
-  await context.sync();
-
-  if (!results.items.length) {
+  if (!matches.length) {
     throw new Error("Missing field: " + marker);
   }
 
-  for (const match of results.items) {
+  for (const match of matches) {
     match.insertText(
       String(value),
       Word.InsertLocation.replace
     );
   }
+
+  await context.sync();
+}
+
+async function removeMarkers(context) {
+  const markers = [
+    "[[CARD_SECTION]]",
+    "[[CARD_START]]",
+    "[[CARD_END]]"
+  ];
+
+  for (const marker of markers) {
+    await replaceAll(context, marker, "");
+  }
+}
+
+async function removeCardSection(context) {
+  const matches = await searchMatches(
+    context,
+    "[[CARD_SECTION]]"
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      "Could not uniquely identify the Credit Card Authorization section."
+    );
+  }
+
+  /*
+    The marker is at the end of the final signature
+    paragraph on page 3, immediately before the
+    section break that introduces page 4.
+
+    Delete from that marker to the end of the document.
+  */
+
+  const start = matches[0];
+  const end = context.document.body.getRange("End");
+
+  const sectionToRemove = start.expandTo(end);
+  sectionToRemove.delete();
 
   await context.sync();
 }
@@ -220,6 +301,9 @@ async function generate(type) {
   try {
     const data = getData(type);
 
+    const includeCard =
+      type === "retainer" ? includeCardForm() : false;
+
     showStatus("Checking the open Word document...");
 
     await inspectDocument(type);
@@ -230,11 +314,19 @@ async function generate(type) {
       for (const [marker, value] of fields) {
         await replaceAll(context, marker, value);
       }
+
+      if (type === "retainer") {
+        if (includeCard) {
+          await removeMarkers(context);
+        } else {
+          await removeCardSection(context);
+        }
+      }
     });
 
     showStatus(
-      "Document completed successfully. " +
-      "Review it, then save it under a new filename."
+      "Document completed. Review the page count and formatting, " +
+      "then save it under a new filename."
     );
 
   } catch (error) {
@@ -251,16 +343,19 @@ async function generate(type) {
 }
 
 Office.onReady(() => {
-  $("generateRetainer").addEventListener("click", () => {
-    generate("retainer");
-  });
+  $("generateRetainer").addEventListener(
+    "click",
+    () => generate("retainer")
+  );
 
-  $("generateCard").addEventListener("click", () => {
-    generate("card");
-  });
+  $("generateCard").addEventListener(
+    "click",
+    () => generate("card")
+  );
 
   showStatus(
     "Open a fresh copy of the appropriate Word template, " +
-    "enter the information, and click its Generate button."
+    "enter the information, select whether to include the " +
+    "Credit Card Authorization Form, and click Generate."
   );
 });
